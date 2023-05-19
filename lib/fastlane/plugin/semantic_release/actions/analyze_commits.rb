@@ -41,6 +41,36 @@ module Fastlane
         commits.split("|>")
       end
 
+      def self.calculate_next_major(past_major, contain_major)
+        if contain_major
+          next_major = past_major + 1
+        else
+          next_major = past_major
+        end
+      end
+
+      def self.calculate_next_minor(past_minor, contain_major, contain_minor)
+        if contain_major
+          next_minor = 0
+        elsif contain_minor
+          next_minor = past_minor + 1
+        else
+          next_minor = past_minor
+        end
+      end
+
+      def self.calculate_next_patch(past_patch, contain_major, contain_minor, contain_patch)
+        if contain_major
+          next_patch = 0
+        elsif contain_minor
+          next_patch = 0
+        elsif contain_patch
+          next_patch = past_patch + 1
+        else
+          next_patch = past_patch
+        end
+      end
+
       def self.get_beginning_of_next_sprint(params)
         # command to get first commit
         git_command = "git rev-list --max-parents=0 HEAD"
@@ -118,9 +148,13 @@ module Fastlane
         hash = beginning[:hash] || 'HEAD'
 
         # converts last version string to the int numbers
-        next_major = (version.split('.')[0] || 0).to_i
-        next_minor = (version.split('.')[1] || 0).to_i
-        next_patch = (version.split('.')[2] || 0).to_i
+        past_major = (version.split('.')[0] || 0).to_i
+        past_minor = (version.split('.')[1] || 0).to_i
+        past_patch = (version.split('.')[2] || 0).to_i
+
+        contain_major = false
+        contain_minor = false
+        contain_patch = false
 
         is_next_version_compatible_with_codepush = true
 
@@ -153,24 +187,27 @@ module Fastlane
           )
 
           if commit[:release] == "major" || commit[:is_breaking_change]
-            next_major += 1
-            next_minor = 0
-            next_patch = 0
+            contain_major = true
           elsif commit[:release] == "minor"
-            next_minor += 1
-            next_patch = 0
+            contain_minor = true
           elsif commit[:release] == "patch"
-            next_patch += 1
+            contain_patch = true
           end
 
           unless commit[:is_codepush_friendly]
             is_next_version_compatible_with_codepush = false
           end
 
+          next_major = self.calculate_next_major(past_major, contain_major)
+          next_minor = self.calculate_next_minor(past_minor, contain_major, contain_minor)
+          next_patch = self.calculate_next_patch(past_patch, contain_major, contain_minor, contain_patch)
           next_version = "#{next_major}.#{next_minor}.#{next_patch}"
           UI.message("#{next_version}: #{subject}") if params[:show_version_path]
         end
 
+        next_major = self.calculate_next_major(past_major, contain_major)
+        next_minor = self.calculate_next_minor(past_minor, contain_major, contain_minor)
+        next_patch = self.calculate_next_patch(past_patch, contain_major, contain_minor, contain_patch)
         next_version = "#{next_major}.#{next_minor}.#{next_patch}"
 
         is_next_version_releasable = Helper::SemanticReleaseHelper.semver_gt(next_version, version)
